@@ -10,15 +10,15 @@ Welcome to the consultation simulation! Nouky will pretend to be a patient with 
 """
 )
 
-from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+# Define the SambaNova API key and base URL 
+# The API is not secret for this Hackathon but I will configure it for the Nouky's final version
 
-# Retrieve the SambaNova API key from environment variables
-api_key = os.getenv("SAMBANOVA_API_KEY")
 
+api_key = os.environ.get("SAMBANOVA_API_KEY", "78133d14-3cff-41c7-bcac-29a3dce289d0")
 base_url = "https://api.sambanova.ai/v1"
+
+
 
 # Define headers for API requests
 headers = {
