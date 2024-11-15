@@ -21,7 +21,7 @@ We faced several challenges, including prompt engineering and fine-tuning parame
 
 ## Accomplishments that we're proud of
 
-We are proud to have developed Nouky's Consultation Agent as a realistic, fast simulation tool that allows students to practice diagnostic skills. Tested and validated by medical students at various levels (Master’s, PhD) thanks to Kawthar's support, the agent’s ability to provide structured, constructive feedback transforms it into an effective learning aid. Additionally, designing a roadmap for the full Nouky app, which will include spaced repetition and exam simulations using our custom dataset, represents a significant accomplishment and sets the stage for a comprehensive educational platform.
+We are proud to have developed Nouky's Consultation Agent as a realistic, fast simulation tool that allows students to practice diagnostic skills. Tested and validated by medical students at various levels (Master’s, PhD) thanks to student's support, the agent’s ability to provide structured, constructive feedback transforms it into an effective learning aid. Additionally, designing a roadmap for the full Nouky app, which will include spaced repetition and exam simulations using our custom dataset, represents a significant accomplishment and sets the stage for a comprehensive educational platform.
 
 ## What we learned
 
