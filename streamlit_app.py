@@ -1,56 +1,298 @@
 import streamlit as st
-from openai import OpenAI
+import requests
+import os
 
-# Show title and description.
-st.title("💬 Chatbot")
+# Display the title and description
+st.title("👩‍⚕️🩺 Medical Consultation Simulation with Nouky")
 st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+    """
+Welcome to the consultation simulation! Nouky will pretend to be a patient with fictitious symptoms. Ask questions, make your diagnosis, and propose a treatment!
+"""
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
-else:
+from dotenv import load_dotenv
 
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
+# Load environment variables from .env file
+load_dotenv()
 
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
+# Retrieve the SambaNova API key from environment variables
+api_key = os.getenv("SAMBANOVA_API_KEY")
+
+base_url = "https://api.sambanova.ai/v1"
+
+# Define headers for API requests
+headers = {
+    "Authorization": f"Bearer {api_key}",
+    "Content-Type": "application/json",
+}
+
+# Select the type of consultation
+consultation_type = st.selectbox(
+    "Choose a consultation type:",
+    [
+        "Cardiology",
+        "Pulmonology",
+        "Gastroenterology",
+        "Neurology",
+        "Dermatology",
+        "Endocrinology",
+    ],
+)
+
+# Generate the disease and symptoms only after the consultation type is selected
+if consultation_type:
+    # Function to generate a random disease and its symptoms using the LLM
+    def generate_disease_and_symptoms(consultation_type):
+        # Prompt to generate a random disease
+        disease_prompt = (
+            f"Randomly choose the names of 10 diseases in {consultation_type}, "
+            f"without any preference or bias, and provide only their names. "
+            f"Do not take only the 10 most common ones. "
+            f"Randomly select one of these 10 diseases and give me only its name."
+        )
+
+        disease_payload = {
+            "model": "Meta-Llama-3.1-70B-Instruct",
+            "messages": [{"role": "user", "content": disease_prompt}],
+            "temperature": 1.0,  # Increased for more randomness
+            "top_p": 0.9,
+        }
+
+        # API call to get the disease
+        try:
+            disease_response = requests.post(
+                f"{base_url}/chat/completions", headers=headers, json=disease_payload
+            )
+            disease_response.raise_for_status()
+            disease = disease_response.json()["choices"][0]["message"]["content"].strip()
+
+            # Ensure only the disease name is returned
+            disease = disease.split("\n")[-1].strip()
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error generating the disease: {e}")
+            return None, None
+
+        # Prompt to generate symptoms without mentioning the disease name
+        symptoms_prompt = (
+            f"Without mentioning the name of the disease, list 3 common symptoms "
+            f"of a disease in {consultation_type} corresponding to: {disease}. "
+            f"Express yourself as a patient and be concise."
+        )
+        symptoms_payload = {
+            "model": "Meta-Llama-3.1-70B-Instruct",
+            "messages": [{"role": "user", "content": symptoms_prompt}],
+            "temperature": 0.9,
+            "top_p": 0.9,
+        }
+
+        # API call to get the symptoms
+        try:
+            symptoms_response = requests.post(
+                f"{base_url}/chat/completions", headers=headers, json=symptoms_payload
+            )
+            symptoms_response.raise_for_status()
+            symptoms_text = symptoms_response.json()["choices"][0]["message"]["content"].strip()
+
+            # Process the response to ensure the disease name is not included
+            symptoms_text = symptoms_text.replace(disease, "").strip(":,-. ")
+
+            # Extract symptoms from the response
+            symptoms_list = [
+                symptom.strip("0123456789.:- ")
+                for symptom in symptoms_text.split("\n")
+                if symptom.strip()
+            ]
+            if len(symptoms_list) < 3:
+                symptoms_list = symptoms_text.replace(",", "\n").split("\n")
+                symptoms_list = [
+                    symptom.strip("0123456789.:- ") for symptom in symptoms_list if symptom.strip()
+                ]
+        except requests.exceptions.RequestException as e:
+            st.error(f"Error generating the symptoms: {e}")
+            return disease, None
+
+        return disease, symptoms_list[:3]  # Return only the first 3 symptoms
+
+    # Generate the disease and symptoms if not already done
+    if (
+        "disease" not in st.session_state
+        or st.session_state.consultation_type != consultation_type
+    ):
+        st.session_state.disease, st.session_state.selected_symptoms = generate_disease_and_symptoms(
+            consultation_type
+        )
+        st.session_state.consultation_type = consultation_type
+
+    disease = st.session_state.disease
+    selected_symptoms = st.session_state.selected_symptoms
+
+    if disease and selected_symptoms:
+        symptoms_text = ", ".join(selected_symptoms)
+        st.write(f"The patient presents to you with the following symptoms: **{symptoms_text}** ")
+    else:
+        st.stop()
+
+    # Session state to store chat messages
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    # Display the existing chat messages via `st.chat_message`.
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+    # Check if the system message has already been added
+    if not any(msg["role"] == "system" for msg in st.session_state.messages):
+        # Add the system message with consultation information
+        st.session_state.messages.append(
+            {
+                "role": "system",
+                "content": f"""You are portraying a patient during a consultation in {consultation_type}.
+Your symptoms are: {symptoms_text} related to a disease that you are unaware of.
+Your goal is to provide detailed and coherent answers to the medical student's questions without directly revealing your diagnosis.
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
-    if prompt := st.chat_input("What is up?"):
+- Respond naturally, as a real patient would.
+- Provide only the information in response to the questions asked, without adding unsolicited details.
+- If a question is unclear or requires clarification, do not hesitate to ask for more information.
+- Avoid using medical or technical language; express yourself in your own words.
+- Do not reveal the exact name of the disease or diagnosis (you are unaware of it anyway).
 
-        # Store and display the current prompt.
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
+Your role is to help the student gather enough information so that they can make an accurate diagnosis by asking the right questions.""",
+            }
         )
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+    def ChatFull():
+        with st.container():
+            # Display chat history
+            for message in st.session_state.messages:
+                if message["role"] != "system":
+                    if message["role"] == "assistant":
+                        # Display assistant's message
+                        st.markdown(f"**Patient:** {message['content']}")
+                    elif message["role"] == "user":
+                        # Display user's message
+                        st.markdown(f"**You:** {message['content']}")
+
+            # Function to detect if the user is requesting a medical test
+            def is_test_request(message):
+                test_keywords = [
+                    "test", "analysis", "exam", "imaging", "mri", "x-ray",
+                    "blood test", "panel", "scan", "ultrasound", "ecg", "echocardiogram"
+                ]
+                return any(keyword in message.lower() for keyword in test_keywords)
+
+            # Function to handle user input
+            def submit_message():
+                chat_input = st.session_state.chat_input
+                if chat_input:
+                    # Store the user's question
+                    st.session_state.messages.append({"role": "user", "content": chat_input})
+
+                    # Check if it's a test request
+                    if is_test_request(chat_input):
+                        # Prepare the prompt for the test agent
+                        test_agent_prompt = {
+                            "role": "system",
+                            "content": f"""You are a medical assistant providing medical test results.
+The patient has the following symptoms: {symptoms_text} and has this disease: {disease}
+Provide medical test results that are consistent with these symptoms and this disease.
+Respond professionally and precisely, providing relevant values.
+If multiple tests are requested, provide results for each.
+
+Do not disclose the name of the disease; just give the results as a laboratory would. Do not analyze the results.""",
+                        }
+                        # Prepare messages for the test agent
+                        test_messages = [test_agent_prompt] + st.session_state.messages[-1:]
+
+                        # Prepare the API request for the test agent
+                        payload = {
+                            "model": "Meta-Llama-3.1-70B-Instruct",
+                            "messages": test_messages,
+                            "temperature": 0.5,
+                            "top_p": 0.9,
+                        }
+                    else:
+                        # Use the default patient agent
+                        payload = {
+                            "model": "Meta-Llama-3.1-70B-Instruct",
+                            "messages": st.session_state.messages,
+                            "temperature": 0.5,
+                            "top_p": 0.9,
+                        }
+
+                    # Send the request to the API
+                    try:
+                        response = requests.post(
+                            f"{base_url}/chat/completions", headers=headers, json=payload
+                        )
+                        response.raise_for_status()
+                        assistant_reply = response.json()["choices"][0]["message"]["content"]
+
+                        # Add the assistant's response
+                        st.session_state.messages.append({"role": "assistant", "content": assistant_reply})
+
+                    except requests.exceptions.RequestException as e:
+                        st.error(f"Error communicating with the SambaNova API: {e}")
+
+                    # Reset the input field
+                    st.session_state.chat_input = ''
+                else:
+                    st.warning("Please enter a question before sending.")
+
+            # Chat input field with on_change callback
+            st.text_input("Ask your question to the patient:", key='chat_input', on_change=submit_message)
+
+    ChatFull()
+
+    # Diagnostic Section
+    st.write("### Provide a final diagnosis and propose a treatment")
+    diagnostic_input = st.text_input(
+        "What is your diagnosis and treatment for this patient?", key="diagnostic_input"
+    )
+
+    # Button to submit the diagnostic
+    if st.button("Submit", key="submit_diagnostic"):
+        if diagnostic_input:
+            # Add the diagnostic to the chat history
+            st.session_state.messages.append(
+                {"role": "user", "content": f"Proposed diagnosis: {diagnostic_input}"}
+            )
+
+            # Prompt for diagnostic evaluation
+            feedback_prompt = f"""You are an examiner evaluating the diagnosis and treatment proposed by a medical student.
+The patient has the following symptoms: {symptoms_text}. The disease is {disease}
+Assess whether the proposed diagnosis matches the patient's condition.
+Also evaluate if the proposed treatment is appropriate for this condition.
+Mention the exact name of the disease in your response.
+Provide a brief feedback indicating whether the diagnosis and treatment are correct."""
+
+            # Prepare the API request
+            payload = {
+                "model": "Meta-Llama-3.1-70B-Instruct",
+                "messages": st.session_state.messages + [
+                    {"role": "system", "content": feedback_prompt}
+                ],
+                "temperature": 0.5,
+                "top_p": 0.9,
+            }
+
+            try:
+                response = requests.post(
+                    f"{base_url}/chat/completions", headers=headers, json=payload
+                )
+                response.raise_for_status()
+                feedback_reply = response.json()["choices"][0]["message"]["content"]
+
+                # Display the feedback
+                st.write("### Diagnosis Evaluation")
+                st.write(feedback_reply)
+
+                # Add the feedback to the session state
+                st.session_state.messages.append({"role": "assistant", "content": feedback_reply})
+
+            except requests.exceptions.RequestException as e:
+                st.error(f"Error submitting the diagnosis: {e}")
+        else:
+            st.warning("Please enter a diagnosis before submitting.")
+
+    # Do not display the disease name to the user
+
+    # If you need to see the disease name for debugging purposes,
+    # you can use st.write() with a condition so it's not visible to the end user.
+    if st.checkbox("Show disease name (debugging)", key="debug"):
+        st.write(f"**Disease name (for debugging):** {disease}")
