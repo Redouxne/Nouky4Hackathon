@@ -6,19 +6,13 @@ import os
 st.title("👩‍⚕️🩺 Medical Consultation Simulation with Nouky")
 st.write(
     """
-Welcome to the consultation simulation! Nouky will pretend to be a patient with fictitious symptoms. Ask questions, make your diagnosis, and propose a treatment!
+Welcome to the consultation simulation! Nouky will pretend to be a patient with fictitious symptoms. Ask questions, make your diagnosis, and propose a treatment !
 """
 )
 
-
-# Define the SambaNova API key and base URL 
-# The API is not secret for this Hackathon but I will configure it for the Nouky's final version
-
-
+# Define the SambaNova API key and base URL
 api_key = os.environ.get("SAMBANOVA_API_KEY", "78133d14-3cff-41c7-bcac-29a3dce289d0")
 base_url = "https://api.sambanova.ai/v1"
-
-
 
 # Define headers for API requests
 headers = {
@@ -160,13 +154,34 @@ Your role is to help the student gather enough information so that they can make
         with st.container():
             # Display chat history
             for message in st.session_state.messages:
-                if message["role"] != "system":
-                    if message["role"] == "assistant":
-                        # Display assistant's message
-                        st.markdown(f"**Patient:** {message['content']}")
-                    elif message["role"] == "user":
-                        # Display user's message
-                        st.markdown(f"**You:** {message['content']}")
+                if message["role"] == "assistant":
+                    # Patient's message with image
+                    col1, col2 = st.columns([1, 8])
+                    with col1:
+                        st.image("Leoard.png", width=50)  # Patient's picture
+                    with col2:
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #f0f2f6; padding: 1rem; border-radius: 0.5rem; max-width: 100%; margin-bottom: 1rem;">
+                                {message['content']}
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
+                elif message["role"] == "user":
+                    # User's message with image
+                    col1, col2 = st.columns([8, 1])
+                    with col2:
+                        st.image("usericon.png", width=50)  # User's picture
+                    with col1:
+                        st.markdown(
+                            f"""
+                            <div style="background-color: #e8f4ff; padding: 1rem; border-radius: 0.5rem; max-width: 100%; margin-bottom: 1rem; text-align: right;">
+                                {message['content']}
+                            </div>
+                            """,
+                            unsafe_allow_html=True,
+                        )
 
             # Function to detect if the user is requesting a medical test
             def is_test_request(message):
@@ -189,12 +204,12 @@ Your role is to help the student gather enough information so that they can make
                         test_agent_prompt = {
                             "role": "system",
                             "content": f"""You are a medical assistant providing medical test results.
-The patient has the following symptoms: {symptoms_text} and has this disease: {disease}
-Provide medical test results that are consistent with these symptoms and this disease.
-Respond professionally and precisely, providing relevant values.
-If multiple tests are requested, provide results for each.
+    The patient has the following symptoms: {symptoms_text} and has this disease: {disease}
+    Provide medical test results that are consistent with these symptoms and this disease.
+    Respond professionally and precisely, providing relevant values.
+    If multiple tests are requested, provide results for each.
 
-Do not disclose the name of the disease; just give the results as a laboratory would. Do not analyze the results.""",
+    Do not disclose the name of the disease; just give the results as a laboratory would. Do not analyze the results.""",
                         }
                         # Prepare messages for the test agent
                         test_messages = [test_agent_prompt] + st.session_state.messages[-1:]
@@ -236,6 +251,9 @@ Do not disclose the name of the disease; just give the results as a laboratory w
 
             # Chat input field with on_change callback
             st.text_input("Ask your question to the patient:", key='chat_input', on_change=submit_message)
+
+
+
 
     ChatFull()
 
@@ -290,9 +308,5 @@ Provide a brief feedback indicating whether the diagnosis and treatment are corr
         else:
             st.warning("Please enter a diagnosis before submitting.")
 
-    # Do not display the disease name to the user
 
-    # If you need to see the disease name for debugging purposes,
-    # you can use st.write() with a condition so it's not visible to the end user.
-    if st.checkbox("Show disease name (debugging)", key="debug"):
-        st.write(f"**Disease name (for debugging):** {disease}")
+
